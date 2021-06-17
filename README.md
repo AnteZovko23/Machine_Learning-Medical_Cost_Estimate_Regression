@@ -1,0 +1,1 @@
+Using Machine Learning and regression, the model can estimate medical costs based on different features
