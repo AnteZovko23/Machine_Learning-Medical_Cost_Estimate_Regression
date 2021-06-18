@@ -1,4 +1,3 @@
-from pandas.core.reshape.reshape import get_dummies
 from tensorflow import keras
 import tensorflow as tf
 
@@ -10,35 +9,14 @@ from sklearn.model_selection import train_test_split
 from sklearn.compose import make_column_transformer
 from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
 
+
+import kerastuner as kt
+
 #### Overhead ######
 
 ##
 
-def getMAE(y_true, y_pred):
-    return tf.metrics.mean_absolute_error(y_true=y_true, y_pred=y_pred)
 
-
-
-def getMSE(y_true, y_pred):
-    return tf.metrics.mean_squared_error(y_true=y_true, y_pred=y_pred)
-
-
-
-def plot_predictions(train_data=[], train_labels=[], test_data=[],test_labels=[], predictions=[]):
-    plt.figure(figsize=(10,7))
-    # plt.scatter(train_data, train_labels, c="b", label="train data")
-    plt.scatter(np.arange(len(test_labels)), test_labels, c="g", label="Test Data")
-    
-    plt.figure(figsize=(10,8))
-    
-    plt.scatter(np.arange(len(test_labels)), test_labels, c="g", label="Test Data")
-
-    plt.scatter(np.arange(len(predictions)), predictions, c ="r", label="Predictions")
-    plt.legend()
-    plt.show()
-
-def plot_model(model):
-    plot_model(model=model, show_shapes=True)
 
 #####################################
 
@@ -81,68 +59,124 @@ def process_data(dataframe):
     return X_train_normal, X_test_normal, y_train, y_test
 
 
-def create_model():
+def create_model2():
 
-    model = tf.keras.Sequential([
-        
+    model = keras.Sequential()
+    model.add(tf.keras.layers.Dense(32 ,activation='relu'))
+    model.add(tf.keras.layers.Dense(992 ,activation='relu'))
+    model.add(tf.keras.layers.Dense(1 ,activation='linear'))
 
-        tf.keras.layers.Dense(1000, activation='relu'),
-        tf.keras.layers.Dense(100, activation='relu'),
-        # tf.keras.layers.Dense(16, activation='relu'),
-        tf.keras.layers.Dense(1)
+    model.compile(loss=tf.keras.losses.MeanAbsoluteError(), 
+    optimizer=tf.keras.optimizers.Adam(learning_rate=0.01), 
+    metrics=['mean_absolute_error'])
 
-    ])
-
-    model.compile(loss=tf.keras.losses.LogCosh(), optimizer=tf.keras.optimizers.Adam(learning_rate=0.01), metrics=['mae'])
 
     return model
 
-#####################################
+def create_model(hp):
 
-dataframe = pd.read_csv("https://raw.githubusercontent.com/stedy/Machine-Learning-with-R-datasets/master/insurance.csv")
+    
+    # Tune num or layers, neurons and the learning rate for the optimizer
+    # Choose an optimal value from 0.01, 0.001, or 0.0001
 
+    model = keras.Sequential()
 
-X_train, X_test, y_train, y_test = load_data(dataframe)
+    ## Optimal Hidden layers 2-20
+    for i in range(hp.Int('num_layers', 2, 20)):
+        model.add(tf.keras.layers.Dense(units= hp.Int('units_' + str(i), min_value=32, max_value=1000, step=32), activation='relu'))
 
-# tf.random.set_seed(42)
+    ## Output layer
+    model.add(tf.keras.layers.Dense(1, activation='linear'))
 
-# model_1 = create_model()
+    model.compile(loss=tf.keras.losses.MeanAbsoluteError(), 
+    optimizer=tf.keras.optimizers.Adam(learning_rate=hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])), 
+    metrics=['mean_absolute_error'])
 
-# history = model_1.fit(X_train, y_train, epochs=200) ## Uncomment to train
-
-# pred_1 = model_1.predict(X_test)
-
-# print(model_1.evaluate(X_test, y_test))
-
-# pd.DataFrame(history.history).plot()
-# plt.ylabel("loss")
-# plt.xlabel("epochs")
-# plt.show()
-# plot_predictions(X_train.index, y_train, X_test.index, y_test, pred_1)
-## Loss: 2371
+    return model
 
 
-######### Preprocess data now ##############
+def save_model(model):
+    model.save('my_model')
 
 
-X_train_normal, X_test_normal, y_train, y_test = process_data(dataframe)
-print(len(y_test))
-tf.random.set_seed(42)
+    #####################################
+
+if __name__ == '__main__':
+
+    dataframe = pd.read_csv("https://raw.githubusercontent.com/stedy/Machine-Learning-with-R-datasets/master/insurance.csv")
 
 
-model_2 = create_model()
 
-history2 = model_2.fit(X_train_normal, y_train, epochs=100, callbacks=[tf.keras.callbacks.EarlyStopping(monitor='loss', patience=5)])
+    ######### Preprocess data now ##############
 
-print(model_2.evaluate(X_test_normal, y_test))
+    
+    X_train_normal, X_test_normal, y_train, y_test = process_data(dataframe)
 
 
-pd.DataFrame(history2.history).plot()
-plt.ylabel("loss")
-plt.xlabel("epochs")
+    tf.random.set_seed(42)
 
-l = np.arange(len(y_test))
 
-pred_1 = model_2.predict(X_test_normal)
-plot_predictions(test_labels=y_test, predictions=pred_1)
-plt.show()
+
+    ## Stop early if loss doesn't go down
+    callback = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=10)
+
+    ####
+    # tuner = kt.BayesianOptimization(create_model,
+    #                     objective='val_mean_absolute_error',
+    #                     max_trials=50,
+    #                     directory='my_dir',
+    #                     project_name='intro_to_kt',
+    #                     overwrite=True)
+
+    # print(tuner.search_space_summary())
+
+    # tuner.search(X_train_normal, y_train, epochs=100, validation_split=0.2, callbacks=[callback])
+    # best_hps=tuner.get_best_hyperparameters(num_trials=50)[0]
+
+    # print(tuner.results_summary())
+
+    # # print(f"""
+    # # The hyperparameter search is complete. The optimal number of units in the first densely-connected
+    # # layer is {best_hps.get('units')} and the optimal learning rate for the optimizer
+    # # is {best_hps.get('learning_rate')}.
+    # # """)
+
+
+
+    # # Build the model with the optimal hyperparameters and train it on the data for 100 epochs
+    # model = tuner.hypermodel.build(best_hps)
+    # history = model.fit(X_train_normal, y_train, epochs=100, validation_split=0.2)
+
+    # loss_per_epoch = history.history['val_mean_absolute_error']
+    # best_epoch = loss_per_epoch.index(max(loss_per_epoch)) + 1
+    # print('Best epoch: %d' % (best_epoch,))
+
+
+    # hypermodel = tuner.hypermodel.build(best_hps)
+
+    # # Retrain the model
+    # hypermodel.fit(X_train_normal, y_train, epochs=best_epoch, validation_split=0.2)
+
+    # save_model(hypermodel)
+    ####
+
+    model2 = create_model2()
+
+    history = model2.fit(X_train_normal, y_train, epochs=100, callbacks=[callback])
+    
+    save_model(model2)
+
+
+    # eval_result = hypermodel.evaluate(X_test_normal, y_test)
+    # print("[test loss, test accuracy]:", eval_result)
+    # history2 = model_2.fit(X_train_normal, y_train, epochs=100, callbacks=[callback])
+
+    # print(model_2.evaluate(X_test_normal, y_test))
+
+
+    pd.DataFrame(history.history).plot()
+    plt.ylabel("loss")
+    plt.xlabel("epochs")
+    plt.show()
+    # l = np.arange(len(y_test))
+
